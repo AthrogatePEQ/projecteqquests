@@ -50,9 +50,9 @@ function setup()
   }
 
   kyvs = {
-    [1]  = { "From the corner of your eye, you notice a Kyv taking aim at your position. You should move.", kyv_move, 5696 },
-    [2]  = { "From the corner of your eye, you notice a Kyv taking aim near your position. He appears to be leading the target, anticipating your next movement. You should stand still.", kyv_stop, 5696 },
-    [3]  = { "From the corner of your eye, you notice a Kyv taking aim at your head. You should duck.", kyv_duck, 5694 },
+    [1]  = { "From the corner of your eye, you notice a Kyv taking aim at your position. You should move.", kyv_move, 5696, "You are struck by a stray arrow!"},
+    [2]  = { "From the corner of your eye, you notice a Kyv taking aim near your position. He appears to be leading the target, anticipating your next movement. You should stand still.", kyv_stop, 5696 ,"You are struck by a stray arrow!"},
+    [3]  = { "From the corner of your eye, you notice a Kyv taking aim at your head. You should duck.", kyv_duck, 5694 ,"Your head is struck by a deadly arrow!"},
   };
 
   equipment = {
@@ -64,6 +64,7 @@ function setup()
     [1] = { "You notice that the Dragorn before you is preparing to cast a devastating close-range spell.", 5693, cast_5693 },
     [2] = { "The Dragorn before you is developing an anti-magic aura.", 5699, self_cast },
     [3] = { "The Dragorn before you is sprouting sharp spikes.", 5698, self_cast },
+	[4] = { "You notice that the Dragorn before you is making preparations to cast a devastating spell.  Doing enough damage to him might interrupt the process." , 5693, cast_5693 }
   }
 
 end
@@ -113,7 +114,7 @@ function Boss_Say(e)
         Start_Event(e);
       end
     else
-      e.self:Say("It appears all members of your adventure are not present, please have them join you before you begin.");
+    e.self:Say("It appears all members of your adventure are not present, please have them join you before you begin.");
     end
   end
 end
@@ -179,8 +180,6 @@ function Boss_Signal(e)
     -- when the event started
     local now_clients = eq.get_entity_list():GetClientList();
 
-    -- TODO: Need to add a check here to ensure no one
-    -- dies or camps or zones out (instant failure).
     Event_Loss(e);
   end
 end
@@ -212,6 +211,7 @@ function Kyv_Timer(e)
     client = kyv_targets[i][1];
     loc = kyv_targets[i][3];
     if ( kyvs[kyv_targets[i][2]][2](e, client, loc) == false ) then
+	  client:Message(14, kyvs[kyv_targets[i][2]][4]);
       e.self:CastSpell(kyvs[kyv_targets[i][2]][3], client:GetID(), 0, 4500);
       eq.debug("name: " .. e.self:GetCleanName() .. i .. " timer: " .. e.timer .. " client picked: " .. client:GetName() );
     else
@@ -275,16 +275,23 @@ end
 
 function check_rings(mob, client)
   if ( client:GetItemIDAt(15) ~= -1 ) then
+	client:Message(14, "Your rings clamp down, breaking fingers and disabling your manual dexterity.");
     mob:CastSpell(5695, client:GetID());
+  else
+    client:Message(14, "Your regain the use of your fingers.");
   end
   if ( client:GetItemIDAt(16) ~= -1 ) then
+	client:Message(14, "Your rings clamp down, breaking fingers and disabling your manual dexterity.");
     mob:CastSpell(5695, client:GetID());
-  end
+  else
+    client:Message(14, "Your regain the use of your fingers.");
+  end 
 end
 
 function check_weapon(mob, client)
   if ( client:GetItemIDAt(14) ~= -1 ) then
-    mob:CastSpell(2315, client:GetID());
+    client:Message(14, "Your weaponry becomes incredibly hot, searing your hands!");
+	mob:CastSpell(2315, client:GetID());		
   else
     client:Message(14, "Your weaponry cools down.");
   end
@@ -302,6 +309,7 @@ function ae_check(e, xmin, xmax, ymin, ymax)
       e.self:CastSpell(5693, v:GetID());
       v:Message(14,'The room explodes with chaotic energy.');
     else
+	  v:Message(14,'The room explodes with chaotic energy.');
       v:Message(14,'You escape the blast unscathed.');
     end
   end
@@ -339,8 +347,24 @@ end
 function Dragorn_Timer(e)
   local num;
   if (e.timer == 'dragorn') then
-    num = math.random(1,table.getn(dragorns));
+	num = math.random(1,table.getn(dragorns));
+	  local dist = 50;
+	  local mob_x = e.self:GetX();
+	  local mob_y = e.self:GetY();
+	  local x,y,z;
+	  local cl = eq.get_entity_list():GetClientList();
+	  for v in cl.entries do
+		x = v:GetX(); y = v:GetY(); z = v:GetZ();
+		if (e.self:CalculateDistance( x, y, z ) < dist ) then
+		  v:Message(8, dragorns[num][1]);
+		end
+	  end
+	--  eq.set_timer('dragorn_cast', dragorn_timer * 1000);
     dragorns[num][3](e.self, dragorns[num][2]);
+	--in here there should be a check to see if we did enough damage to prevent getting nuked (flashfire).  ballpark 50k damage required to interrupt
+	--all dragorn spells are ~8 seconds after emote
+  --elseif (e.timer == 'dragorn_cast') then
+  
   end
 end
 
@@ -353,15 +377,17 @@ function cast_5693(mob, spell)
   for v in cl.entries do
     x = v:GetX(); y = v:GetY(); z = v:GetZ();
     if (mob:CalculateDistance( x, y, z ) < dist ) then
-      mob:CastSpell(spell, v:GetID());
+      mob:CastSpell(spell, v:GetID(),0,8000);
     end
   end
 end
 
+--dragorns only use this
 function self_cast(mob,spell)
-  mob:CastSpell(spell, mob:GetID());
+  mob:CastSpell(spell, mob:GetID(),0,8000);
 end
 
+--repop_zone does not work
 function Event_Loss(e)
   eq.depop_with_timer();
   eq.repop_zone();
